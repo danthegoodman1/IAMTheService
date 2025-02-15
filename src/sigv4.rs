@@ -223,6 +223,7 @@ pub async fn proxy_request(
 
 
     let old_host = url::Url::parse(&url).unwrap().host().unwrap();
+    // TODO: Look up new host
 
     // TODO: Resign the request with the new host
 
