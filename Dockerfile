@@ -1,19 +1,24 @@
-# Build stage
-FROM rust:1.82.0-bullseye as builder
+FROM golang:1.21.1-bullseye as build
 
 WORKDIR /app
 
-# Copy over manifests AND source code first
+ARG GO_ARGS=""
+
+COPY go.* /app/
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=ssh \
+    go mod download
+
 COPY . .
 
-# Now build for release
-RUN cargo build --release
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go build $GO_ARGS -o /app/outbin
 
-# Final stage
-FROM gcr.io/distroless/cc-debian12
+# Need glibc
+FROM gcr.io/distroless/base-debian11
 
-# Copy the built binary from builder
-COPY --from=builder /app/target/release/citizenstats_server /app/citizenstats_server
-
-# Set the binary as the entrypoint
-ENTRYPOINT ["/app/citizenstats_server"]
+ENTRYPOINT ["/app/outbin"]
+COPY --from=build /app/outbin /app/
