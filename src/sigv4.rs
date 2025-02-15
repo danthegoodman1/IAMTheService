@@ -97,6 +97,7 @@ fn get_aws_auth_header(req: &Request<Body>) -> Result<AWSAuthHeader, Error> {
         signed_headers: Vec::new(),
     };
 
+    // TODO: make this more efficient, optional host override
     // Extract signed headers and other parts from the Authorization header.
     if let Some(header_value) = req.headers().get("Authorization") {
         let header_str = header_value
@@ -219,6 +220,11 @@ pub async fn proxy_request(
     // Clone headers and method before consuming the body.
     let headers = req.headers().clone();
     let method = req.method().clone();
+
+
+    let new_host = url::Url::parse(&url).unwrap().host().unwrap();
+
+    // TODO: Resign the request with the new host
 
     // Convert the Axum body into a stream and map its error type.
     let body_stream = req.into_body().into_data_stream();

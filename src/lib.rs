@@ -14,7 +14,6 @@ use tower::{buffer::BufferLayer, BoxError, ServiceBuilder};
 use tracing::{error, info};
 
 mod rate_limiter;
-mod routes;
 mod sigv4;
 use rate_limiter::{ip_rate_limiter, RateLimiter};
 
