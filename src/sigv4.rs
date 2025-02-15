@@ -222,7 +222,7 @@ pub async fn proxy_request(
     let method = req.method().clone();
 
 
-    let new_host = url::Url::parse(&url).unwrap().host().unwrap();
+    let old_host = url::Url::parse(&url).unwrap().host().unwrap();
 
     // TODO: Resign the request with the new host
 
