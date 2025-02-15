@@ -25,7 +25,7 @@ async fn main() {
     tracing::subscriber::set_global_default(subscriber).unwrap();
 
     tokio::select! {
-        _ = start("0.0.0.0:8080", "0.0.0.0:50051".parse().unwrap()) => {},
+        _ = start("0.0.0.0:8080") => {},
         _ = shutdown_signal() => {
             warn!("Shutdown timer completed, terminating...");
         }

@@ -1,6 +1,5 @@
 use axum::routing::post;
 use axum::{middleware, routing::get};
-use grpc::hello_world::helloworld::greeter_server;
 use std::net::SocketAddr;
 
 use std::sync::Arc;
@@ -16,8 +15,6 @@ use axum::{
 use tower::{buffer::BufferLayer, BoxError, ServiceBuilder};
 use tracing::{error, info};
 
-pub mod grpc;
-pub mod json_rpc;
 mod rate_limiter;
 mod routes;
 use rate_limiter::{ip_rate_limiter, RateLimiter};
@@ -27,22 +24,14 @@ struct AppState {
     rate_limiter: Arc<RateLimiter>,
 }
 
-pub async fn start(http_addr: &str, grpc_addr: SocketAddr) {
+pub async fn start(http_addr: &str) {
     let state = AppState {
         rate_limiter: Arc::new(RateLimiter::new(10, Duration::from_secs(60))), // 10 requests per minute
     };
 
-    let greeter_service = grpc::hello_world::MyGreeter::default();
-    let grpc_service =
-        Server::builder().add_service(greeter_server::GreeterServer::new(greeter_service));
-
     let app = axum::Router::new()
         .route("/echo/json", post(routes::echo_json))
         .route("/echo/json_extractor", post(routes::echo_json_extractor))
-        .route("/sse", get(routes::sse_res))
-        .route("/stream", get(routes::stream_res))
-        .route("/stream_handler", post(routes::stream_handler))
-        .route("/json_rpc", post(routes::json_rpc))
         // .route(
         //     "/{key}",
         //     get(routes::get::get_key).post(routes::post::write_key),
@@ -69,7 +58,7 @@ pub async fn start(http_addr: &str, grpc_addr: SocketAddr) {
         )
         .with_state(state);
 
-    info!("Starting on http://{} and grpc://{}", http_addr, grpc_addr);
+    info!("Starting on http://{}", http_addr);
     let axum_listener = tokio::net::TcpListener::bind(http_addr).await.unwrap();
 
     let axum_server = axum::serve(axum_listener, app).with_graceful_shutdown(async {
@@ -78,14 +67,8 @@ pub async fn start(http_addr: &str, grpc_addr: SocketAddr) {
             .expect("Failed to install Ctrl+C handler");
         info!("Received shutdown signal");
     });
-    let grpc_server = grpc_service.serve_with_shutdown(grpc_addr, async {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("Failed to install Ctrl+C handler");
-        info!("Received shutdown signal");
-    });
 
-    _ = tokio::join!(axum_server, grpc_server);
+    _ = tokio::join!(axum_server);
 }
 
 // Make our own error that wraps `anyhow::Error`.
