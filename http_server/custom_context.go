@@ -14,8 +14,8 @@ import (
 
 type CustomContext struct {
 	echo.Context
-	RequestID string
-	UserID    string
+	RequestID      string
+	AWSCredentials AWSAuthHeaderCredential
 }
 
 func CreateReqContext(next echo.HandlerFunc) echo.HandlerFunc {

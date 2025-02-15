@@ -4,13 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/danthegoodman1/IAMTheService/observability"
-	"github.com/joho/godotenv"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/joho/godotenv"
+
+	"github.com/danthegoodman1/IAMTheService/observability"
 
 	"github.com/danthegoodman1/IAMTheService/gologger"
 	"github.com/danthegoodman1/IAMTheService/http_server"
