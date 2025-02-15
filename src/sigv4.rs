@@ -14,7 +14,6 @@ use reqwest;
 
 use crate::AppState;
 
-// max payload size is 256k
 type HmacSha256 = Hmac<Sha256>;
 
 fn get_hmac(key: &[u8], data: &[u8]) -> Vec<u8> {
