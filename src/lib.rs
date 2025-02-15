@@ -1,10 +1,8 @@
-use axum::routing::post;
-use axum::{middleware, routing::get};
-use std::net::SocketAddr;
+use axum::routing::any;
+use axum::middleware;
 
 use std::sync::Arc;
 use std::time::Duration;
-use tonic::transport::Server;
 
 use axum::{
     error_handling::HandleErrorLayer,
@@ -17,21 +15,23 @@ use tracing::{error, info};
 
 mod rate_limiter;
 mod routes;
+mod sigv4;
 use rate_limiter::{ip_rate_limiter, RateLimiter};
 
 #[derive(Clone)]
 struct AppState {
     rate_limiter: Arc<RateLimiter>,
+    client: reqwest::Client,
 }
 
 pub async fn start(http_addr: &str) {
     let state = AppState {
         rate_limiter: Arc::new(RateLimiter::new(10, Duration::from_secs(60))), // 10 requests per minute
+        client: reqwest::Client::new(),
     };
 
     let app = axum::Router::new()
-        .route("/echo/json", post(routes::echo_json))
-        .route("/echo/json_extractor", post(routes::echo_json_extractor))
+        .route("/", any(sigv4::proxy_request))
         // .route(
         //     "/{key}",
         //     get(routes::get::get_key).post(routes::post::write_key),
