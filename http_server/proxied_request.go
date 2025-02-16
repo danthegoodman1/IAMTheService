@@ -66,7 +66,7 @@ func (r *ProxiedRequest) DoProxiedRequest(ctx context.Context, host string) (*ht
 	originalURL := r.Request.URL
 
 	// set the new host
-	r.Request.Host = host
+	r.Request.Host = host // need to set because we are using the request to sign
 	originalURL.Host = host
 
 	// Because we changed the host, we need to resign the request to the new host
