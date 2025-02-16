@@ -1,24 +1,23 @@
+use anyhow::Error;
 use axum::{
+    body::Body,
     extract::State,
     http::{Request, Response, StatusCode},
     response::IntoResponse,
-    body::Body,
 };
 use futures::TryStreamExt;
+use hex;
 use hmac::{Hmac, Mac};
+use reqwest;
 use sha2::{Digest, Sha256};
 use std::fmt::Write;
-use anyhow::Error;
-use hex;
-use reqwest;
 
 use crate::AppState;
 
 type HmacSha256 = Hmac<Sha256>;
 
 fn get_hmac(key: &[u8], data: &[u8]) -> Vec<u8> {
-    let mut mac = HmacSha256::new_from_slice(key)
-        .expect("HMAC can take key of any size");
+    let mut mac = HmacSha256::new_from_slice(key).expect("HMAC can take key of any size");
     mac.update(data);
     let result = mac.finalize();
     result.into_bytes().to_vec()
@@ -30,10 +29,16 @@ fn get_sha256(data: &[u8]) -> Vec<u8> {
     hasher.finalize().to_vec()
 }
 
-fn get_string_to_sign(req: &Request<Body>, canonical_request: &str, service: &str, region: &str) -> String {
+fn get_string_to_sign(
+    req: &Request<Body>,
+    canonical_request: &str,
+    service: &str,
+    region: &str,
+) -> String {
     let mut s = String::from("AWS4-HMAC-SHA256\n");
 
-    let x_amz_date = req.headers()
+    let x_amz_date = req
+        .headers()
         .get("X-Amz-Date")
         .and_then(|value| value.to_str().ok())
         .unwrap_or_default();
@@ -41,35 +46,41 @@ fn get_string_to_sign(req: &Request<Body>, canonical_request: &str, service: &st
     s.push_str(x_amz_date);
     s.push('\n');
 
-    let scope = format!("{}/{}/{}/{}", &x_amz_date[..8], region, service, "aws4_request");
+    let scope = format!(
+        "{}/{}/{}/{}",
+        &x_amz_date[..8],
+        region,
+        service,
+        "aws4_request"
+    );
     s.push_str(&scope);
     s.push('\n');
 
     let canonical_request_hash = get_sha256(canonical_request.as_bytes());
     let mut hex_encoded_hash = String::new();
     for byte in canonical_request_hash {
-        write!(hex_encoded_hash, "{:02x}", byte)
-            .expect("Can write to a String");
+        write!(hex_encoded_hash, "{:02x}", byte).expect("Can write to a String");
     }
 
     s.push_str(&hex_encoded_hash);
     s
 }
 
-fn get_signing_key(req: &Request<Body>) -> Vec<u8> {
-    let x_amz_date = req.headers()
+fn get_signing_key(req: &Request<Body>, key_secret: &str, region: &str, service: &str) -> Vec<u8> {
+    let x_amz_date = req
+        .headers()
         .get("X-Amz-Date")
         .and_then(|value| value.to_str().ok())
         .unwrap_or_default();
 
-    let date_key = get_hmac(b"AWS4testpassword", &x_amz_date[..8].as_bytes());
-    let date_region_key = get_hmac(&date_key, b"us-east-1");
-    let date_region_service_key = get_hmac(&date_region_key, b"dynamodb");
+    let date_key = get_hmac(key_secret.as_bytes(), &x_amz_date[..8].as_bytes());
+    let date_region_key = get_hmac(&date_key, region.as_bytes());
+    let date_region_service_key = get_hmac(&date_region_key, service.as_bytes());
     let signing_key = get_hmac(&date_region_service_key, b"aws4_request");
     signing_key
 }
 
-struct AWSAuthHeaderCredential {
+pub struct AWSAuthHeaderCredential {
     key_id: String,
     date: String,
     region: String,
@@ -77,7 +88,7 @@ struct AWSAuthHeaderCredential {
     request: String,
 }
 
-struct AWSAuthHeader {
+pub struct AWSAuthHeader {
     credential: AWSAuthHeaderCredential,
     signed_headers: Vec<String>,
     signature: String,
@@ -105,11 +116,8 @@ fn get_aws_auth_header(req: &Request<Body>) -> Result<AWSAuthHeader, Error> {
         for item in header_str.split_whitespace() {
             let item = item.trim_end_matches(",");
             if item.starts_with("SignedHeaders=") {
-                let headers = item
-                    .trim_start_matches("SignedHeaders=")
-                    .replace(",", ";");
-                auth_header.signed_headers =
-                    headers.split(';').map(str::to_string).collect();
+                let headers = item.trim_start_matches("SignedHeaders=").replace(",", ";");
+                auth_header.signed_headers = headers.split(';').map(str::to_string).collect();
             }
             if item.starts_with("Credential=") {
                 let credential_parts: Vec<String> = item
@@ -128,15 +136,17 @@ fn get_aws_auth_header(req: &Request<Body>) -> Result<AWSAuthHeader, Error> {
                 }
             }
             if item.starts_with("Signature=") {
-                auth_header.signature =
-                    item.trim_start_matches("Signature=").to_string();
+                auth_header.signature = item.trim_start_matches("Signature=").to_string();
             }
         }
     }
     Ok(auth_header)
 }
 
-fn get_canonical_request(req: &Request<Body>, auth_header: &AWSAuthHeader) -> Result<String, Error> {
+fn get_canonical_request(
+    req: &Request<Body>,
+    auth_header: &AWSAuthHeader,
+) -> Result<String, Error> {
     let mut canonical_request = String::new();
 
     // Add HTTP method.
@@ -189,6 +199,28 @@ fn extract_provided_signature(req: &Request<Body>) -> Option<String> {
     None
 }
 
+pub fn generate_sig_v4(
+    req: &Request<Body>,
+    parsed_auth_header: AWSAuthHeader,
+    key_secret: &str,
+) -> Result<String, Error> {
+    let canonical_request = get_canonical_request(&req, &parsed_auth_header)?;
+    let string_to_sign = get_string_to_sign(
+        &req,
+        &canonical_request,
+        parsed_auth_header.credential.service.as_str(),
+        parsed_auth_header.credential.region.as_str(),
+    );
+    let signing_key = get_signing_key(
+        &req,
+        key_secret,
+        parsed_auth_header.credential.region.as_str(),
+        parsed_auth_header.credential.service.as_str(),
+    );
+    let signature = hex::encode(get_hmac(&signing_key, string_to_sign.as_bytes()));
+    Ok(signature)
+}
+
 #[axum::debug_handler]
 pub async fn proxy_request(
     State(state): State<AppState>,
@@ -196,16 +228,18 @@ pub async fn proxy_request(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let parsed_auth_header =
         get_aws_auth_header(&req).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-    let canonical_request =
-        get_canonical_request(&req, &parsed_auth_header).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-    let string_to_sign = get_string_to_sign(&req, &canonical_request, parsed_auth_header.credential.service.as_str(), parsed_auth_header.credential.region.as_str());
-    let signing_key = get_signing_key(&req);
-    let signature =
-        hex::encode(get_hmac(&signing_key, string_to_sign.as_bytes()));
-    let provided_signature =
-        extract_provided_signature(&req).unwrap_or_else(|| "None".to_string());
+    let provided_signature = parsed_auth_header.signature.clone();
+
+    let key_secret = "hey";
+    let signature = generate_sig_v4(&req, parsed_auth_header, key_secret)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+
     println!("Provided Signature: {}", provided_signature);
     println!("Calculated Signature: {}", signature);
+
+    if signature != signature {
+        return Err((StatusCode::BAD_REQUEST, "Signature mismatch".to_string()));
+    }
 
     // Define the backend URL to proxy to.
     let base_url = "https://httpbin.org/anything";
@@ -220,7 +254,6 @@ pub async fn proxy_request(
     let headers = req.headers().clone();
     let method = req.method().clone();
 
-
     let old_host = url::Url::parse(&url).unwrap().host().unwrap();
     // TODO: Look up new host
 
@@ -231,7 +264,8 @@ pub async fn proxy_request(
     let proxied_body = reqwest::Body::wrap_stream(body_stream.into_stream());
 
     // Build the proxied request using the Reqwest client with streaming body.
-    let client_req = state.client
+    let client_req = state
+        .client
         .request(method, &url)
         .headers(headers)
         .body(proxied_body);
@@ -254,7 +288,7 @@ pub async fn proxy_request(
     let stream = response.bytes_stream();
 
     Ok(axum::response::Response::builder()
-    .header("Content-Type", "application/octet-stream")
-    .body(axum::body::Body::from_stream(stream))
-    .unwrap())
+        .header("Content-Type", "application/octet-stream")
+        .body(axum::body::Body::from_stream(stream))
+        .unwrap())
 }
