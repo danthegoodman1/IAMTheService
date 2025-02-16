@@ -231,6 +231,7 @@ pub async fn proxy_request(
         get_aws_auth_header(&req).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     let provided_signature = parsed_auth_header.signature.clone();
 
+    // TODO: get the secret key
     let key_secret = "hey";
     let signature = generate_sig_v4(&req, &parsed_auth_header, key_secret)
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
