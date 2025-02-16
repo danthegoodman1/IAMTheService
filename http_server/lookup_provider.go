@@ -13,7 +13,7 @@ type LookupProvider[TKey, TVal any] interface {
 	Lookup(ctx context.Context, key TKey) (*TVal, error)
 }
 
-// EnvJSONLookupProvider uses an env var encoded as JSON like HOSTS={"key":"val"}
+// EnvJSONLookupProvider uses an env var encoded as JSON like HOST_MAP={"key":"val"}
 // where keys and values are wrapped in single quotes, separated by colons,
 // and pairs separated by commas
 type EnvJSONLookupProvider struct {
