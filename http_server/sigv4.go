@@ -140,9 +140,10 @@ func verifyAWSRequestMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		logger := zerolog.Ctx(c.Request().Context())
 		logger.Debug().Msg("verifying aws request")
+		parsedHeader := parseAuthHeader(c.Request().Header.Get("Authorization"))
 
-		valid, parsedHeader := verifyAWSRequest(c.Request(), "")
-		if !valid {
+		signature := generateSigV4(c.Request(), parsedHeader, "")
+		if signature != parsedHeader.Signature {
 			return ErrInvalidSignature
 		}
 
@@ -153,14 +154,13 @@ func verifyAWSRequestMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
-func verifyAWSRequest(r *http.Request, keySecret string) (bool, AWSAuthHeader) {
+func generateSigV4(r *http.Request, parsedHeader AWSAuthHeader, keySecret string) string {
 	logger.Debug().Msg("verifying aws request")
-	parsedHeader := parseAuthHeader(r.Header.Get("Authorization"))
 	canonicalRequest := getCanonicalRequest(r)
 	stringToSign := getStringToSign(r, canonicalRequest, parsedHeader.Credential.Region, parsedHeader.Credential.Service)
 
 	signingKey := getSigningKey(r, keySecret, parsedHeader.Credential.Region, parsedHeader.Credential.Service)
 	signature := fmt.Sprintf("%x", getHMAC(signingKey, []byte(stringToSign)))
 
-	return signature == parsedHeader.Signature, parsedHeader
+	return signature
 }

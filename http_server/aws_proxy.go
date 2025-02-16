@@ -30,15 +30,9 @@ func (p *AWSProxy) Listen(addr string) error {
 }
 
 func (p *AWSProxy) handleRequest(w http.ResponseWriter, r *http.Request) error {
+	ctx := context.Background()
+
 	parsedHeader := parseAuthHeader(r.Header.Get("Authorization"))
-
-	ctx := context.Background() // todo fix this
-
-	// Verify the request
-
-	// Because we changed the host, we need to resign the request to the new host
-	canonicalRequest := getCanonicalRequest(r)
-	stringToSign := getStringToSign(r, canonicalRequest, parsedHeader.Credential.Region, parsedHeader.Credential.Service)
 
 	// Look up key secret from ID
 	keySecret, err := p.keyLookupProvider.Lookup(ctx, parsedHeader.Credential.KeyID)
@@ -47,12 +41,11 @@ func (p *AWSProxy) handleRequest(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("error looking up key: %w", err)
 	}
 
-	signingKey := getSigningKey(r, keySecret, parsedHeader.Credential.Region, parsedHeader.Credential.Service)
-	signature := fmt.Sprintf("%x", getHMAC(signingKey, []byte(stringToSign)))
+	signature := generateSigV4(r, parsedHeader, keySecret)
 
 	if signature != parsedHeader.Signature {
 		// TODO respond
-		return ErrInvalidSignature
+		return fmt.Errorf("invalid signature")
 	}
 
 	proxiedRequest := ProxiedRequest{
