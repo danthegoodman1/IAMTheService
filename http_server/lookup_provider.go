@@ -39,3 +39,21 @@ func (e EnvJSONLookupProvider) Lookup(_ context.Context, key string) (*string, e
 
 	return nil, nil
 }
+
+// MapLookupProvider just uses a map
+type MapLookupProvider[TKey comparable, TVal any] struct {
+	m map[TKey]TVal
+}
+
+// NewMapLookupProvider will create a new MapLookupProvider from a given env var.
+func NewMapLookupProvider[TKey comparable, TVal any](m map[TKey]TVal) (MapLookupProvider[TKey, TVal], error) {
+	return MapLookupProvider[TKey, TVal]{m}, nil
+}
+
+func (e MapLookupProvider[TKey, TVal]) Lookup(_ context.Context, key TKey) (*TVal, error) {
+	if val, exists := e.m[key]; exists {
+		return &val, nil
+	}
+
+	return nil, nil
+}
