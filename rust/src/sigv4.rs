@@ -30,7 +30,7 @@ fn get_sha256(data: &[u8]) -> Vec<u8> {
     hasher.finalize().to_vec()
 }
 
-fn get_string_to_sign(req: &Request<Body>, canonical_request: &str) -> String {
+fn get_string_to_sign(req: &Request<Body>, canonical_request: &str, service: &str, region: &str) -> String {
     let mut s = String::from("AWS4-HMAC-SHA256\n");
 
     let x_amz_date = req.headers()
@@ -41,7 +41,7 @@ fn get_string_to_sign(req: &Request<Body>, canonical_request: &str) -> String {
     s.push_str(x_amz_date);
     s.push('\n');
 
-    let scope = format!("{}/{}/{}/{}", &x_amz_date[..8], "us-east-1", "dynamodb", "aws4_request");
+    let scope = format!("{}/{}/{}/{}", &x_amz_date[..8], region, service, "aws4_request");
     s.push_str(&scope);
     s.push('\n');
 
@@ -198,7 +198,7 @@ pub async fn proxy_request(
         get_aws_auth_header(&req).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     let canonical_request =
         get_canonical_request(&req, &parsed_auth_header).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
-    let string_to_sign = get_string_to_sign(&req, &canonical_request);
+    let string_to_sign = get_string_to_sign(&req, &canonical_request, parsed_auth_header.credential.service.as_str(), parsed_auth_header.credential.region.as_str());
     let signing_key = get_signing_key(&req);
     let signature =
         hex::encode(get_hmac(&signing_key, string_to_sign.as_bytes()));
