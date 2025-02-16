@@ -92,7 +92,7 @@ func (r *ProxiedRequest) DoRequest(ctx context.Context, host string) (*http.Resp
 	return res, nil
 }
 
-type AWSService interface {
+type AWSServiceProvider interface {
 	// HandleRequest will handle a request for a given service.
 	// Returning a *http.Response will stream that response to the client
 	HandleRequest(ctx context.Context, request *ProxiedRequest) (*http.Response, error)
