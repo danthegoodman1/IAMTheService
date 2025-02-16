@@ -70,9 +70,9 @@ func (r *ProxiedRequest) DoProxiedRequest(ctx context.Context, host string) (*ht
 
 	// Because we changed the host, we need to resign the request to the new host
 	canonicalRequest := getCanonicalRequest(r.Request)
-	stringToSign := getStringToSign(r.Request, canonicalRequest)
+	stringToSign := getStringToSign(r.Request, canonicalRequest, r.Region, r.Service)
 
-	signingKey := getSigningKey(r.Request, r.KeySecret)
+	signingKey := getSigningKey(r.Request, r.KeySecret, r.Region, r.Service)
 	signature := fmt.Sprintf("%x", getHMAC(signingKey, []byte(stringToSign)))
 
 	// Update the auth header with the new signature

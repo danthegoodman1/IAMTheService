@@ -38,7 +38,7 @@ func (p *AWSProxy) handleRequest(w http.ResponseWriter, r *http.Request) error {
 
 	// Because we changed the host, we need to resign the request to the new host
 	canonicalRequest := getCanonicalRequest(r)
-	stringToSign := getStringToSign(r, canonicalRequest)
+	stringToSign := getStringToSign(r, canonicalRequest, parsedHeader.Credential.Region, parsedHeader.Credential.Service)
 
 	// Look up key secret from ID
 	keySecret, err := p.keyLookupProvider.Lookup(ctx, parsedHeader.Credential.KeyID)
@@ -47,7 +47,7 @@ func (p *AWSProxy) handleRequest(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("error looking up key: %w", err)
 	}
 
-	signingKey := getSigningKey(r, keySecret)
+	signingKey := getSigningKey(r, keySecret, parsedHeader.Credential.Region, parsedHeader.Credential.Service)
 	signature := fmt.Sprintf("%x", getHMAC(signingKey, []byte(stringToSign)))
 
 	if signature != parsedHeader.Signature {

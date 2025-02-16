@@ -17,8 +17,6 @@ var (
 	ErrInvalidSignature = echo.NewHTTPError(403, "invalid signature")
 
 	// TODO replace these
-	Region  = "us-east-1"
-	Service = "s3"
 )
 
 func getHMAC(key []byte, data []byte) []byte {
@@ -64,21 +62,21 @@ func getCanonicalRequest(request *http.Request) string {
 	return s
 }
 
-func getStringToSign(request *http.Request, canonicalRequest string) string {
+func getStringToSign(request *http.Request, canonicalRequest, region, service string) string {
 	s := "AWS4-HMAC-SHA256" + "\n"
 	s += request.Header.Get("X-Amz-Date") + "\n"
 
-	scope := request.Header.Get("X-Amz-Date")[:8] + "/" + Region + "/" + Service + "/aws4_request"
+	scope := request.Header.Get("X-Amz-Date")[:8] + "/" + region + "/" + service + "/aws4_request"
 	s += scope + "\n"
 	s += fmt.Sprintf("%x", getSHA256([]byte(canonicalRequest)))
 
 	return s
 }
 
-func getSigningKey(request *http.Request, password string) []byte {
+func getSigningKey(request *http.Request, password, region, service string) []byte {
 	dateKey := getHMAC([]byte("AWS4"+password), []byte(request.Header.Get("X-Amz-Date")[:8]))
-	dateRegionKey := getHMAC(dateKey, []byte(Region))
-	dateRegionServiceKey := getHMAC(dateRegionKey, []byte(Service))
+	dateRegionKey := getHMAC(dateKey, []byte(region))
+	dateRegionServiceKey := getHMAC(dateRegionKey, []byte(service))
 	signingKey := getHMAC(dateRegionServiceKey, []byte("aws4_request"))
 	return signingKey
 }
@@ -144,12 +142,12 @@ func verifyAWSRequest(next echo.HandlerFunc) echo.HandlerFunc {
 		logger.Debug().Msg("verifying aws request")
 		parsedHeader := parseAuthHeader(c.Request().Header.Get("Authorization"))
 		canonicalRequest := getCanonicalRequest(c.Request())
-		stringToSign := getStringToSign(c.Request(), canonicalRequest)
+		stringToSign := getStringToSign(c.Request(), canonicalRequest, parsedHeader.Credential.Region, parsedHeader.Credential.Service)
 
 		// TODO look up key secret from ID
 		keySecret := ""
 
-		signingKey := getSigningKey(c.Request(), keySecret)
+		signingKey := getSigningKey(c.Request(), keySecret, parsedHeader.Credential.Region, parsedHeader.Credential.Service)
 		signature := fmt.Sprintf("%x", getHMAC(signingKey, []byte(stringToSign)))
 
 		if signature != parsedHeader.Signature {

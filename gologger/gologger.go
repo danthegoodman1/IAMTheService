@@ -67,15 +67,15 @@ func NewLogger() zerolog.Logger {
 
 	logger = logger.Hook(CallerHook{})
 
-	if os.Getenv("PRETTY") == "1" {
+	if os.Getenv("LOG_JSON") != "1" {
 		logger = logger.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 	}
-	if os.Getenv("TRACE") == "1" {
+	if os.Getenv("LOG_TRACE") == "1" {
 		zerolog.SetGlobalLevel(zerolog.TraceLevel)
-	} else if os.Getenv("DEBUG") == "1" {
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	} else {
+	} else if os.Getenv("LOG_INFO") == "1" {
 		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	} else {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	}
 
 	return logger
