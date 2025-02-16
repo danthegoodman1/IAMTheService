@@ -8,6 +8,7 @@ use axum::{
 use futures::TryStreamExt;
 use hex;
 use hmac::{Hmac, Mac};
+use regex;
 use reqwest;
 use sha2::{Digest, Sha256};
 use std::fmt::Write;
@@ -201,7 +202,7 @@ fn extract_provided_signature(req: &Request<Body>) -> Option<String> {
 
 pub fn generate_sig_v4(
     req: &Request<Body>,
-    parsed_auth_header: AWSAuthHeader,
+    parsed_auth_header: &AWSAuthHeader,
     key_secret: &str,
 ) -> Result<String, Error> {
     let canonical_request = get_canonical_request(&req, &parsed_auth_header)?;
@@ -224,14 +225,14 @@ pub fn generate_sig_v4(
 #[axum::debug_handler]
 pub async fn proxy_request(
     State(state): State<AppState>,
-    req: Request<Body>,
+    mut req: Request<Body>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let parsed_auth_header =
         get_aws_auth_header(&req).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     let provided_signature = parsed_auth_header.signature.clone();
 
     let key_secret = "hey";
-    let signature = generate_sig_v4(&req, parsed_auth_header, key_secret)
+    let signature = generate_sig_v4(&req, &parsed_auth_header, key_secret)
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
 
     println!("Provided Signature: {}", provided_signature);
@@ -241,23 +242,36 @@ pub async fn proxy_request(
         return Err((StatusCode::BAD_REQUEST, "Signature mismatch".to_string()));
     }
 
-    // Define the backend URL to proxy to.
-    let base_url = "https://httpbin.org/anything";
-    let uri = req.uri();
-    let url = if let Some(query) = uri.query() {
-        format!("{}?{}", base_url, query)
-    } else {
-        base_url.to_string()
-    };
-
-    // Clone headers and method before consuming the body.
-    let headers = req.headers().clone();
-    let method = req.method().clone();
-
-    let old_host = url::Url::parse(&url).unwrap().host().unwrap();
     // TODO: Look up new host
 
-    // TODO: Resign the request with the new host
+    // Define the backend URL to proxy to.
+    let new_url = url::Url::parse(&"https://httpbin.org").unwrap();
+
+    // Clone headers and method before consuming the body.
+    req.headers_mut().remove(axum::http::header::HOST);
+    req.headers_mut()
+        .insert(axum::http::header::HOST, new_url.host().unwrap().to_string().parse().unwrap());
+    let method = req.method().clone();
+    let headers = req.headers().clone();
+
+    // Resign the request with the new host
+    let new_signature = generate_sig_v4(&req, &parsed_auth_header, key_secret)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+
+    // Replace the signature in the header
+    let auth_header_value = req.headers().get("Authorization").unwrap();
+    let re = regex::Regex::new(r"Signature=[^,]+").unwrap();
+    let replacement = format!("Signature={}", new_signature);
+    let updated_auth_header = re
+        .replace_all(auth_header_value.to_str().unwrap(), replacement.as_str())
+        .to_string();
+
+    req.headers_mut().remove(axum::http::header::AUTHORIZATION);
+    // Update the Authorization header in the request.
+    req.headers_mut().insert(
+        axum::http::header::AUTHORIZATION,
+        updated_auth_header.parse().unwrap(),
+    );
 
     // Convert the Axum body into a stream and map its error type.
     let body_stream = req.into_body().into_data_stream();
@@ -266,7 +280,7 @@ pub async fn proxy_request(
     // Build the proxied request using the Reqwest client with streaming body.
     let client_req = state
         .client
-        .request(method, &url)
+        .request(method, &new_url.to_string())
         .headers(headers)
         .body(proxied_body);
 

@@ -1291,6 +1291,7 @@ dependencies = [
  "hmac",
  "hyper",
  "prost",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",
