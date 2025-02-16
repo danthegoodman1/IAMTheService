@@ -136,21 +136,13 @@ func parseAuthHeader(header string) AWSAuthHeader {
 	return authHeader
 }
 
-func verifyAWSRequest(next echo.HandlerFunc) echo.HandlerFunc {
+func verifyAWSRequestMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		logger := zerolog.Ctx(c.Request().Context())
 		logger.Debug().Msg("verifying aws request")
-		parsedHeader := parseAuthHeader(c.Request().Header.Get("Authorization"))
-		canonicalRequest := getCanonicalRequest(c.Request())
-		stringToSign := getStringToSign(c.Request(), canonicalRequest, parsedHeader.Credential.Region, parsedHeader.Credential.Service)
 
-		// TODO look up key secret from ID
-		keySecret := ""
-
-		signingKey := getSigningKey(c.Request(), keySecret, parsedHeader.Credential.Region, parsedHeader.Credential.Service)
-		signature := fmt.Sprintf("%x", getHMAC(signingKey, []byte(stringToSign)))
-
-		if signature != parsedHeader.Signature {
+		valid, parsedHeader := verifyAWSRequest(c.Request(), "")
+		if !valid {
 			return ErrInvalidSignature
 		}
 
@@ -159,4 +151,16 @@ func verifyAWSRequest(next echo.HandlerFunc) echo.HandlerFunc {
 
 		return next(c)
 	}
+}
+
+func verifyAWSRequest(r *http.Request, keySecret string) (bool, AWSAuthHeader) {
+	logger.Debug().Msg("verifying aws request")
+	parsedHeader := parseAuthHeader(r.Header.Get("Authorization"))
+	canonicalRequest := getCanonicalRequest(r)
+	stringToSign := getStringToSign(r, canonicalRequest, parsedHeader.Credential.Region, parsedHeader.Credential.Service)
+
+	signingKey := getSigningKey(r, keySecret, parsedHeader.Credential.Region, parsedHeader.Credential.Service)
+	signature := fmt.Sprintf("%x", getHMAC(signingKey, []byte(stringToSign)))
+
+	return signature == parsedHeader.Signature, parsedHeader
 }
