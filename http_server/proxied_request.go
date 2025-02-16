@@ -20,6 +20,7 @@ type ProxiedRequest struct {
 	responseWriter    http.ResponseWriter
 	keyLookupProvider LookupProvider[string, string]
 	hijacked          bool
+	parsedHeader      AWSAuthHeader
 }
 
 func cloneBody(orig io.ReadCloser) (io.ReadCloser, io.ReadCloser) {
@@ -69,11 +70,7 @@ func (r *ProxiedRequest) DoProxiedRequest(ctx context.Context, host string) (*ht
 	originalURL.Host = host
 
 	// Because we changed the host, we need to resign the request to the new host
-	canonicalRequest := getCanonicalRequest(r.Request)
-	stringToSign := getStringToSign(r.Request, canonicalRequest, r.Region, r.Service)
-
-	signingKey := getSigningKey(r.Request, r.KeySecret, r.Region, r.Service)
-	signature := fmt.Sprintf("%x", getHMAC(signingKey, []byte(stringToSign)))
+	signature := generateSigV4(r.Request, r.parsedHeader, r.KeySecret)
 
 	// Update the auth header with the new signature
 	originalAuthHeader := r.Request.Header.Get("Authorization")

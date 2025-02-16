@@ -57,6 +57,7 @@ func (p *AWSProxy) handleRequest(w http.ResponseWriter, r *http.Request) error {
 		XAMZDate:          parsedHeader.Credential.Date,
 		keyLookupProvider: p.keyLookupProvider,
 		responseWriter:    w,
+		parsedHeader:      parsedHeader,
 	}
 
 	serviceProvider, err := p.serviceLookupProvider.Lookup(ctx, r.Host)
