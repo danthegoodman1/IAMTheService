@@ -15,6 +15,8 @@ type ProxiedRequest struct {
 	KeyID        string
 	Service      string
 	XAMZDate     string
+
+	keyLookupProvider LookupProvider[string, string]
 }
 
 func cloneBody(orig io.ReadCloser) (io.ReadCloser, io.ReadCloser) {
@@ -67,10 +69,13 @@ func (r *ProxiedRequest) DoRequest(ctx context.Context, host string) (*http.Resp
 	canonicalRequest := getCanonicalRequest(r.Request)
 	stringToSign := getStringToSign(r.Request, canonicalRequest)
 
-	// TODO look up key secret from ID
-	keySecret := ""
+	// Look up key secret from ID
+	keySecret, err := r.keyLookupProvider.Lookup(ctx, r.KeyID)
+	if err != nil {
+		return nil, fmt.Errorf("error looking up key: %w", err)
+	}
 
-	signingKey := getSigningKey(r.Request, keySecret)
+	signingKey := getSigningKey(r.Request, *keySecret)
 	signature := fmt.Sprintf("%x", getHMAC(signingKey, []byte(stringToSign)))
 
 	// Update the auth header with the new signature
