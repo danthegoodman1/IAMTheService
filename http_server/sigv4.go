@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 
@@ -32,13 +33,13 @@ func getSHA256(data []byte) []byte {
 	return hash.Sum(nil)
 }
 
-func getCanonicalRequest(c echo.Context) string {
+func getCanonicalRequest(request *http.Request) string {
 	s := ""
-	s += c.Request().Method + "\n"
-	s += c.Request().URL.EscapedPath() + "\n"
-	s += c.Request().URL.Query().Encode() + "\n"
+	s += request.Method + "\n"
+	s += request.URL.EscapedPath() + "\n"
+	s += request.URL.Query().Encode() + "\n"
 
-	signedHeadersList, _ := lo.Find(strings.Split(c.Request().Header.Get("Authorization"), ", "), func(item string) bool {
+	signedHeadersList, _ := lo.Find(strings.Split(request.Header.Get("Authorization"), ", "), func(item string) bool {
 		return strings.HasPrefix(item, "SignedHeaders")
 	})
 
@@ -47,35 +48,35 @@ func getCanonicalRequest(c echo.Context) string {
 	for _, header := range signedHeaders {
 		if header == "host" {
 			// For some reason the host header was blank (thanks echo?)
-			s += strings.ToLower(header) + ":" + strings.TrimSpace(c.Request().Host) + "\n"
+			s += strings.ToLower(header) + ":" + strings.TrimSpace(request.Host) + "\n"
 			continue
 		}
-		s += strings.ToLower(header) + ":" + strings.TrimSpace(c.Request().Header.Get(header)) + "\n"
+		s += strings.ToLower(header) + ":" + strings.TrimSpace(request.Header.Get(header)) + "\n"
 	}
 
 	s += "\n" // examples have this JESUS WHY DOCS FFS
 
 	s += strings.Join(signedHeaders, ";") + "\n"
 
-	shaHeader := c.Request().Header.Get("x-amz-content-sha256")
+	shaHeader := request.Header.Get("x-amz-content-sha256")
 	s += lo.Ternary(shaHeader == "", "UNSIGNED-PAYLOAD", shaHeader)
 
 	return s
 }
 
-func getStringToSign(c echo.Context, canonicalRequest string) string {
+func getStringToSign(request *http.Request, canonicalRequest string) string {
 	s := "AWS4-HMAC-SHA256" + "\n"
-	s += c.Request().Header.Get("X-Amz-Date") + "\n"
+	s += request.Header.Get("X-Amz-Date") + "\n"
 
-	scope := c.Request().Header.Get("X-Amz-Date")[:8] + "/" + Region + "/" + Service + "/aws4_request"
+	scope := request.Header.Get("X-Amz-Date")[:8] + "/" + Region + "/" + Service + "/aws4_request"
 	s += scope + "\n"
 	s += fmt.Sprintf("%x", getSHA256([]byte(canonicalRequest)))
 
 	return s
 }
 
-func getSigningKey(c echo.Context, password string) []byte {
-	dateKey := getHMAC([]byte("AWS4"+password), []byte(c.Request().Header.Get("X-Amz-Date")[:8]))
+func getSigningKey(request *http.Request, password string) []byte {
+	dateKey := getHMAC([]byte("AWS4"+password), []byte(request.Header.Get("X-Amz-Date")[:8]))
 	dateRegionKey := getHMAC(dateKey, []byte(Region))
 	dateRegionServiceKey := getHMAC(dateRegionKey, []byte(Service))
 	signingKey := getHMAC(dateRegionServiceKey, []byte("aws4_request"))
@@ -94,10 +95,14 @@ type (
 		Date    string
 		Region  string
 		Service string
+		// always "aws4_request"
 		Request string
 	}
 )
 
+// headers look like
+//
+//	Authorization: AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request,  SignedHeaders=host;range;x-amz-date, Signature=fe5f80f77d5fa3beca038a248ff027d0445342fe2855ddc963176630326f1024
 func parseAuthHeader(header string) AWSAuthHeader {
 	var authHeader AWSAuthHeader
 	parts := strings.Split(header, " ")
@@ -138,13 +143,13 @@ func verifyAWSRequest(next echo.HandlerFunc) echo.HandlerFunc {
 		logger := zerolog.Ctx(c.Request().Context())
 		logger.Debug().Msg("verifying aws request")
 		parsedHeader := parseAuthHeader(c.Request().Header.Get("Authorization"))
-		canonicalRequest := getCanonicalRequest(c)
-		stringToSign := getStringToSign(c, canonicalRequest)
+		canonicalRequest := getCanonicalRequest(c.Request())
+		stringToSign := getStringToSign(c.Request(), canonicalRequest)
 
 		// TODO look up key secret from ID
 		keySecret := ""
 
-		signingKey := getSigningKey(c, keySecret)
+		signingKey := getSigningKey(c.Request(), keySecret)
 		signature := fmt.Sprintf("%x", getHMAC(signingKey, []byte(stringToSign)))
 
 		if signature != parsedHeader.Signature {
