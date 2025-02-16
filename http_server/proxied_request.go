@@ -13,10 +13,13 @@ type ProxiedRequest struct {
 	OriginalHost string
 	Region       string
 	KeyID        string
+	KeySecret    string
 	Service      string
 	XAMZDate     string
 
+	responseWriter    http.ResponseWriter
 	keyLookupProvider LookupProvider[string, string]
+	hijacked          bool
 }
 
 func cloneBody(orig io.ReadCloser) (io.ReadCloser, io.ReadCloser) {
@@ -57,8 +60,8 @@ func (r *ProxiedRequest) GetClonedBody() io.Reader {
 	return cloned
 }
 
-// DoRequest will do the original request, replacing the specified host
-func (r *ProxiedRequest) DoRequest(ctx context.Context, host string) (*http.Response, error) {
+// DoProxiedRequest will do the original request, replacing the specified host
+func (r *ProxiedRequest) DoProxiedRequest(ctx context.Context, host string) (*http.Response, error) {
 	originalURL := r.Request.URL
 
 	// set the new host
@@ -69,13 +72,7 @@ func (r *ProxiedRequest) DoRequest(ctx context.Context, host string) (*http.Resp
 	canonicalRequest := getCanonicalRequest(r.Request)
 	stringToSign := getStringToSign(r.Request, canonicalRequest)
 
-	// Look up key secret from ID
-	keySecret, err := r.keyLookupProvider.Lookup(ctx, r.KeyID)
-	if err != nil {
-		return nil, fmt.Errorf("error looking up key: %w", err)
-	}
-
-	signingKey := getSigningKey(r.Request, *keySecret)
+	signingKey := getSigningKey(r.Request, r.KeySecret)
 	signature := fmt.Sprintf("%x", getHMAC(signingKey, []byte(stringToSign)))
 
 	// Update the auth header with the new signature
@@ -89,10 +86,25 @@ func (r *ProxiedRequest) DoRequest(ctx context.Context, host string) (*http.Resp
 		return nil, fmt.Errorf("error in http.NewRequestWithContext: %w", err)
 	}
 
+	// Copy headers
+	for header, vals := range r.Request.Header {
+		req.Header[header] = vals
+	}
+	// Set new header
+	req.Header.Set("Authorization", originalAuthHeader)
+
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("error in http.DefaultClient.Do: %w", err)
 	}
 
 	return res, nil
+}
+
+// Hijack tells the proxy that it is no longer responsible for handling the
+// response to the original request, and gives you the response writer instead.
+// It is not checked whether this has been called prior, so be careful with creating multiple writers
+func (r *ProxiedRequest) Hijack() http.ResponseWriter {
+	r.hijacked = true
+	return r.responseWriter
 }

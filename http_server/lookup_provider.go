@@ -10,7 +10,7 @@ import (
 // LookupProvider is used to perform KV lookups for things like
 // AWS Key ID to key secret and incoming host to destination host
 type LookupProvider[TKey, TVal any] interface {
-	Lookup(ctx context.Context, key TKey) (*TVal, error)
+	Lookup(ctx context.Context, key TKey) (TVal, error)
 }
 
 // EnvJSONLookupProvider uses an env var encoded as JSON like HOST_MAP={"key":"val"}
@@ -32,12 +32,12 @@ func NewEnvJSONLookupProvider(envVar string) (EnvJSONLookupProvider, error) {
 	return EnvJSONLookupProvider{m: envMap}, nil
 }
 
-func (e EnvJSONLookupProvider) Lookup(_ context.Context, key string) (*string, error) {
+func (e EnvJSONLookupProvider) Lookup(_ context.Context, key string) (string, error) {
 	if val, exists := e.m[key]; exists {
-		return &val, nil
+		return val, nil
 	}
 
-	return nil, nil
+	return "", nil
 }
 
 // MapLookupProvider just uses a map
@@ -50,10 +50,10 @@ func NewMapLookupProvider[TKey comparable, TVal any](m map[TKey]TVal) (MapLookup
 	return MapLookupProvider[TKey, TVal]{m}, nil
 }
 
-func (e MapLookupProvider[TKey, TVal]) Lookup(_ context.Context, key TKey) (*TVal, error) {
+func (e MapLookupProvider[TKey, TVal]) Lookup(_ context.Context, key TKey) (TVal, error) {
 	if val, exists := e.m[key]; exists {
-		return &val, nil
+		return val, nil
 	}
-
-	return nil, nil
+	var defVal TVal
+	return defVal, nil
 }
