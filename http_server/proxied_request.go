@@ -64,13 +64,16 @@ func (r *ProxiedRequest) GetClonedBody() io.Reader {
 // DoProxiedRequest will do the original request, replacing the specified host
 func (r *ProxiedRequest) DoProxiedRequest(ctx context.Context, host string) (*http.Response, error) {
 	originalURL := r.Request.URL
+	oldHost := r.Request.Host
 
 	// set the new host
-	r.Request.Host = host // need to set because we are using the request to sign
 	originalURL.Host = host
 
 	// Because we changed the host, we need to resign the request to the new host
+	r.Request.Host = host
 	signature := generateSigV4(r.Request, r.parsedHeader, r.KeySecret)
+	// Put the host back
+	r.Request.Host = oldHost
 
 	// Update the auth header with the new signature
 	originalAuthHeader := r.Request.Header.Get("Authorization")

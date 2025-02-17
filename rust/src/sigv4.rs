@@ -246,7 +246,9 @@ pub async fn proxy_request(
     // TODO: Look up new host
 
     // Define the backend URL to proxy to.
-    let new_url = url::Url::parse(&"https://httpbin.org").unwrap();
+    let mut new_url = url::Url::parse(&"https://httpbin.org").unwrap();
+    new_url.set_path(req.uri().path());
+    new_url.set_query(req.uri().query());
 
     // Clone headers and method before consuming the body.
     req.headers_mut().remove(axum::http::header::HOST);
