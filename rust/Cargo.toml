@@ -28,6 +28,7 @@ reqwest = {version = "0.12.9", features = ["stream"]}
 url = "2.5.4"
 tracing-serde = "0.2.0"
 regex = "1.11.1"
+uuid = { version = "1.14.0", features = ["v4"] }
 
 [dev-dependencies]
 reqwest = { version = "0.12.9", features = ["json", "stream"] }
