@@ -142,7 +142,7 @@ func verifyAWSRequestMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		logger.Debug().Msg("verifying aws request")
 		parsedHeader := parseAuthHeader(c.Request().Header.Get("Authorization"))
 
-		signature := generateSigV4(c.Request(), parsedHeader, "")
+		signature := generateSigV4(c.Request(), parsedHeader, "test_secret") // TODO: lookup real key
 		if signature != parsedHeader.Signature {
 			return ErrInvalidSignature
 		}

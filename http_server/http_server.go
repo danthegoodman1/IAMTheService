@@ -62,6 +62,11 @@ func StartHTTPServer() *HTTPServer {
 	// technical - no auth
 	s.Echo.GET("/hc", s.HealthCheck)
 
+	// dummy route to test request verification
+	s.Echo.Any("**", ccHandler(func(c *CustomContext) error {
+		return c.JSON(http.StatusOK, c.AWSCredentials)
+	}), verifyAWSRequestMiddleware)
+
 	s.Echo.Listener = listener
 	go func() {
 		logger.Info().Msg("starting h2c server on " + listener.Addr().String())
