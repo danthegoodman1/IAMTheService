@@ -40,27 +40,27 @@ type CustomValidator struct {
 	validator *validator.Validate
 }
 
-func StartHTTPServer() *HTTPServer {
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%s", utils.GetEnvOrDefault("HTTP_PORT", "8080")))
+func StartHTTPServer(port int) *HTTPServer {
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		logger.Error().Err(err).Msg("error creating tcp listener, exiting")
 		os.Exit(1)
 	}
+
 	s := &HTTPServer{
 		Echo: echo.New(),
 	}
 	s.Echo.HideBanner = true
 	s.Echo.HidePort = true
 	s.Echo.JSONSerializer = &utils.NoEscapeJSONSerializer{}
-
 	s.Echo.Use(CreateReqContext)
 	s.Echo.Use(LoggerMiddleware)
 	s.Echo.Use(middleware.CORS())
 	s.Echo.Validator = &CustomValidator{validator: validator.New()}
 	s.Echo.HTTPErrorHandler = customHTTPErrorHandler
 
-	// technical - no auth
-	s.Echo.GET("/hc", s.HealthCheck)
+	internalRoutes := s.Echo.Group("/.internal")
+	internalRoutes.GET("/hc", s.HealthCheck)
 
 	// dummy route to test request verification
 	s.Echo.Any("**", ccHandler(func(c *CustomContext) error {
