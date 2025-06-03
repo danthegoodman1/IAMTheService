@@ -7,26 +7,15 @@ import (
 	"net/http"
 )
 
+type LookupFunc[TKey any, TVal any] func(ctx context.Context, key TKey) (TVal, error)
+
 type AWSProxy struct {
-	// TODO all these lookup providers, esp for the service, feel a bit strange
 	// AWS Key id to secret
-	keyLookupProvider LookupProvider[string, string]
+	KeyLookupFunc LookupFunc[string, string]
 	// incoming hostname to outgoing hostname
-	hostLookupProvider LookupProvider[string, string]
+	HostLookupFunc LookupFunc[string, string]
 	// incoming hostname to service provider
-	serviceLookupProvider LookupProvider[string, AWSServiceProvider]
-}
-
-func NewAWSProxy(
-	keyLookupProvider, hostLookupProvider LookupProvider[string, string],
-	serviceLookupProvider LookupProvider[string, AWSServiceProvider],
-) AWSProxy {
-	panic("todo")
-}
-
-// Listen will listen on an interface:port pair
-func (p *AWSProxy) Listen(addr string) error {
-	panic("todo")
+	ServiceLookupFunc LookupFunc[string, AWSServiceProvider]
 }
 
 func (p *AWSProxy) handleRequest(w http.ResponseWriter, r *http.Request) error {
@@ -35,7 +24,7 @@ func (p *AWSProxy) handleRequest(w http.ResponseWriter, r *http.Request) error {
 	parsedHeader := parseAuthHeader(r.Header.Get("Authorization"))
 
 	// Look up key secret from ID
-	keySecret, err := p.keyLookupProvider.Lookup(ctx, parsedHeader.Credential.KeyID)
+	keySecret, err := p.KeyLookupFunc(ctx, parsedHeader.Credential.KeyID)
 	if err != nil {
 		// TODO respond
 		return fmt.Errorf("error looking up key: %w", err)
@@ -55,12 +44,12 @@ func (p *AWSProxy) handleRequest(w http.ResponseWriter, r *http.Request) error {
 		KeyID:             parsedHeader.Credential.KeyID,
 		Service:           parsedHeader.Credential.Service,
 		XAMZDate:          parsedHeader.Credential.Date,
-		keyLookupProvider: p.keyLookupProvider,
+		keyLookupProvider: p.KeyLookupFunc,
 		responseWriter:    w,
 		parsedHeader:      parsedHeader,
 	}
 
-	serviceProvider, err := p.serviceLookupProvider.Lookup(ctx, r.Host)
+	serviceProvider, err := p.ServiceLookupFunc(ctx, r.Host)
 	if err != nil {
 		// TODO respond
 		return fmt.Errorf("error looking up service provider for host %s: %w", r.Host, err)
