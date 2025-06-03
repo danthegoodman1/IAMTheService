@@ -44,37 +44,3 @@ func (p *BaseAWSProvider) HandleRequest(ctx context.Context, request *ProxiedReq
 	targetHost := p.serviceName + ".amazonaws.com"
 	return request.DoProxiedRequest(ctx, targetHost)
 }
-
-// ExtractOperationName attempts to determine the AWS API operation from the request
-// This is a helper method that specific providers can use or override
-func (p *BaseAWSProvider) ExtractOperationName(request *ProxiedRequest) string {
-	// This is a simplified implementation and may need to be enhanced
-	// for specific services
-
-	path := request.Request.URL.Path
-	method := request.Request.Method
-
-	// Extract operation based on HTTP method and path pattern
-	// This is very service-specific and would need customization
-
-	// Example for common patterns:
-	switch method {
-	case "GET":
-		if path == "/" || path == "" {
-			return "ListBuckets" // S3 example
-		}
-		if strings.HasSuffix(path, "/") {
-			return "ListObjects" // S3 example
-		}
-		return "GetObject" // S3 example
-	case "PUT":
-		if strings.HasSuffix(path, "/") {
-			return "CreateBucket" // S3 example
-		}
-		return "PutObject" // S3 example
-	case "DELETE":
-		return "DeleteObject" // S3 example
-	}
-
-	return "Unknown"
-}
