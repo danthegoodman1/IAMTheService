@@ -17,10 +17,9 @@ type ProxiedRequest struct {
 	Service      string
 	XAMZDate     string
 
-	responseWriter    http.ResponseWriter
-	keyLookupProvider LookupProvider[string, string]
-	hijacked          bool
-	parsedHeader      AWSAuthHeader
+	responseWriter http.ResponseWriter
+	hijacked       bool
+	parsedHeader   AWSAuthHeader
 }
 
 func cloneBody(orig io.ReadCloser) (io.ReadCloser, io.ReadCloser) {
