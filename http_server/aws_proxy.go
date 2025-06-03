@@ -38,15 +38,14 @@ func (p *AWSProxy) handleRequest(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	proxiedRequest := ProxiedRequest{
-		Request:           r,
-		OriginalHost:      r.Host,
-		Region:            parsedHeader.Credential.Region,
-		KeyID:             parsedHeader.Credential.KeyID,
-		Service:           parsedHeader.Credential.Service,
-		XAMZDate:          parsedHeader.Credential.Date,
-		keyLookupProvider: p.KeyLookupFunc,
-		responseWriter:    w,
-		parsedHeader:      parsedHeader,
+		Request:        r,
+		OriginalHost:   r.Host,
+		Region:         parsedHeader.Credential.Region,
+		KeyID:          parsedHeader.Credential.KeyID,
+		Service:        parsedHeader.Credential.Service,
+		XAMZDate:       parsedHeader.Credential.Date,
+		responseWriter: w,
+		parsedHeader:   parsedHeader,
 	}
 
 	serviceProvider, err := p.ServiceLookupFunc(ctx, r.Host)
