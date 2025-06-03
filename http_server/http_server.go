@@ -70,7 +70,7 @@ func StartHTTPServer(port int) *HTTPServer {
 	s.Echo.Listener = listener
 	go func() {
 		logger.Info().Msg("starting h2c server on " + listener.Addr().String())
-		// this just basically creates an h2c.NewHandler(echo, &http2.Server{})
+		// this just basically creates a h2c.NewHandler(echo, &http2.Server{})
 		err := s.Echo.StartH2CServer("", &http2.Server{})
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error().Err(err).Msg("failed to start h2c server, exiting")
